@@ -10,21 +10,24 @@ import SwiftUI
 struct PlayerCountSetupView: View {
     @Binding var playerCount: Int
 
+    let hasGameHistory: Bool
     let onStart: () -> Void
+    let onShowHistory: () -> Void
 
     @State private var crownValue: Double = 3
     @FocusState private var isCrownFocused: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 7) {
             Text("Archery 21")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(PlayerCountPalette.gold)
 
             Text("Players")
-                .font(.system(size: 10, weight: .regular))
+                .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 11) {
+            HStack(spacing: 10) {
                 CountAdjustmentButton(
                     systemImage: "minus",
                     isDisabled: playerCount <= 1
@@ -33,7 +36,7 @@ struct PlayerCountSetupView: View {
                 }
 
                 Text("\(playerCount)")
-                    .font(.system(size: 40, weight: .semibold))
+                    .font(.system(size: 52, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(Color(red: 0.56, green: 0.78, blue: 0.74))
 
@@ -45,15 +48,26 @@ struct PlayerCountSetupView: View {
                 }
             }
 
-            Button {
-                onStart()
-            } label: {
-                PlayerCountStartLabel()
+            HStack(spacing: 6) {
+                Button {
+                    onStart()
+                } label: {
+                    PlayerCountStartLabel(isCompact: hasGameHistory)
+                }
+                .buttonStyle(.plain)
+
+                if hasGameHistory {
+                    Button {
+                        onShowHistory()
+                    } label: {
+                        PlayerCountHistoryLabel()
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .focusable(true)
         .focused($isCrownFocused)
         .digitalCrownRotation(
@@ -76,10 +90,16 @@ struct PlayerCountSetupView: View {
             }
         }
         .onAppear {
-            crownValue = Double(playerCount)
+            let playerCountValue = Double(playerCount)
+
+            if crownValue != playerCountValue {
+                crownValue = playerCountValue
+            }
 
             DispatchQueue.main.async {
-                isCrownFocused = true
+                if !isCrownFocused {
+                    isCrownFocused = true
+                }
             }
         }
         .onDisappear {
@@ -96,6 +116,10 @@ struct PlayerCountSetupView: View {
     }
 }
 
+private enum PlayerCountPalette {
+    static let gold = Color(red: 0.98, green: 0.72, blue: 0.27)
+}
+
 private struct CountAdjustmentButton: View {
     let systemImage: String
     let isDisabled: Bool
@@ -110,9 +134,9 @@ private struct CountAdjustmentButton: View {
             action()
         } label: {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.white.opacity(isDisabled ? 0.28 : 0.86))
-                .frame(width: 30, height: 28)
+                .frame(width: 36, height: 32)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color.white.opacity(isDisabled ? 0.04 : 0.08))
@@ -129,19 +153,41 @@ private struct CountAdjustmentButton: View {
 }
 
 private struct PlayerCountStartLabel: View {
+    let isCompact: Bool
+
     var body: some View {
         Text("Start")
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 13, weight: .semibold))
             .lineLimit(1)
             .foregroundStyle(.black)
-            .frame(width: 70, height: 28)
+            .frame(width: isCompact ? 68 : 82, height: 32)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.92))
+                    .fill(PlayerCountPalette.gold)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.24), lineWidth: 1)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct PlayerCountHistoryLabel: View {
+    var body: some View {
+        Label("History", systemImage: "clock.arrow.circlepath")
+            .font(.system(size: 11, weight: .semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.76)
+            .foregroundStyle(.white.opacity(0.9))
+            .frame(width: 70, height: 32)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }

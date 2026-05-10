@@ -7,14 +7,19 @@ struct ContentView: View {
     @State private var initialsDrafts: [InitialsDraft] = []
     @State private var gameState = GameState(players: [])
     @State private var latestResult: GameResult?
+    @State private var gameHistory: [GameResult] = []
 
     var body: some View {
         switch appPhase {
         case .playerCountSetup:
             PlayerCountSetupView(
                 playerCount: $playerCount,
+                hasGameHistory: !gameHistory.isEmpty,
                 onStart: {
                     prepareInitialsSetup()
+                },
+                onShowHistory: {
+                    appPhase = .history
                 }
             )
 
@@ -56,6 +61,18 @@ struct ContentView: View {
                     }
                 )
             }
+
+        case .history:
+            GameHistoryView(
+                results: gameHistory,
+                onSelect: { result in
+                    latestResult = result
+                    appPhase = .results
+                },
+                onBack: {
+                    appPhase = .playerCountSetup
+                }
+            )
         }
     }
 
@@ -84,7 +101,15 @@ struct ContentView: View {
     }
 
     private func finishGame() {
-        latestResult = gameState.makeResult()
+        let result = gameState.makeResult()
+
+        latestResult = result
+        gameHistory.insert(result, at: 0)
+
+        if gameHistory.count > 20 {
+            gameHistory.removeLast(gameHistory.count - 20)
+        }
+
         appPhase = .results
     }
 

@@ -12,4 +12,6 @@ enum AppPhase: Equatable {
     case initialsSetup
     case playing
     case results
+    case history
 }
+

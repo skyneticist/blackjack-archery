@@ -13,20 +13,31 @@ struct GameResult: Identifiable, Equatable {
     let targetScore: Int
     let playerResults: [PlayerResult]
 
+    private let winnersCache: [PlayerResult]
+    private let leadingNonBustResultsCache: [PlayerResult]
+    private let sortedPlayerResultsCache: [PlayerResult]
+
     init(
         id: UUID = UUID(),
         finishedAt: Date = Date(),
         targetScore: Int = Player.targetScore,
         playerResults: [PlayerResult]
     ) {
+        let winners = playerResults.filter { $0.didWin }
+        let leadingNonBustResults = Self.makeLeadingNonBustResults(from: playerResults)
+        let sortedPlayerResults = Self.makeSortedPlayerResults(from: playerResults)
+
         self.id = id
         self.finishedAt = finishedAt
         self.targetScore = targetScore
         self.playerResults = playerResults
+        self.winnersCache = winners
+        self.leadingNonBustResultsCache = leadingNonBustResults
+        self.sortedPlayerResultsCache = sortedPlayerResults
     }
 
     var winners: [PlayerResult] {
-        playerResults.filter { $0.didWin }
+        winnersCache
     }
 
     var hasWinner: Bool {
@@ -34,14 +45,7 @@ struct GameResult: Identifiable, Equatable {
     }
 
     var leadingNonBustResults: [PlayerResult] {
-        let eligibleResults = playerResults.filter { !$0.didBust }
-        let topScore = eligibleResults.map(\.finalScore).max()
-
-        guard let topScore else {
-            return []
-        }
-
-        return eligibleResults.filter { $0.finalScore == topScore }
+        leadingNonBustResultsCache
     }
 
     var winnerText: String {
@@ -77,6 +81,94 @@ struct GameResult: Identifiable, Equatable {
     }
 
     var sortedPlayerResults: [PlayerResult] {
+        sortedPlayerResultsCache
+    }
+
+    var summaryText: String {
+        let sortedResults = sortedPlayerResults
+        let winningResults = sortedResults.filter { $0.didWin }
+        let leadingResults = leadingNonBustResults
+        let hasWinningResult = !winningResults.isEmpty
+        let leadingResultIDs = Set(leadingResults.map(\.id))
+        var playerWidth = 3
+        var scoreWidth = 2
+        let rankWidth = String(sortedResults.count).count
+        var lines: [String] = []
+
+        for result in sortedResults {
+            playerWidth = max(playerWidth, result.initials.count)
+            scoreWidth = max(scoreWidth, String(result.finalScore).count)
+        }
+
+        lines.reserveCapacity(8 + sortedResults.count)
+        lines.append("Archery 21")
+        lines.append("")
+        lines.append(
+            shareOutcomeTitle(
+                winningResults: winningResults,
+                leadingResults: leadingResults
+            )
+        )
+        lines.append(
+            shareOutcomeDetail(
+                winningResults: winningResults,
+                leadingResults: leadingResults
+            )
+        )
+        lines.append("")
+        lines.append("Target: \(targetScore)")
+        lines.append("Players: \(playerResults.count)")
+        lines.append("")
+        lines.append("Scorecard")
+
+        if sortedResults.isEmpty {
+            lines.append("No scores recorded.")
+        } else {
+            for (index, result) in sortedResults.enumerated() {
+                let rankText = leftPadded(
+                    "\(index + 1)",
+                    to: rankWidth
+                )
+                let scoreText = leftPadded(
+                    "\(result.finalScore)",
+                    to: scoreWidth
+                )
+                let statusText = shareStatus(
+                    for: result,
+                    hasWinningResult: hasWinningResult,
+                    leadingResultIDs: leadingResultIDs
+                )
+                let statusSuffix = statusText.map { "   \($0)" } ?? ""
+
+                lines.append("\(rankText). \(padded(result.initials, to: playerWidth))   \(scoreText)\(statusSuffix)")
+            }
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private static func makeLeadingNonBustResults(from playerResults: [PlayerResult]) -> [PlayerResult] {
+        var topScore: Int?
+        var leadingResults: [PlayerResult] = []
+
+        for result in playerResults where !result.didBust {
+            if let currentTopScore = topScore {
+                if result.finalScore > currentTopScore {
+                    topScore = result.finalScore
+                    leadingResults = [result]
+                } else if result.finalScore == currentTopScore {
+                    leadingResults.append(result)
+                }
+            } else {
+                topScore = result.finalScore
+                leadingResults = [result]
+            }
+        }
+
+        return leadingResults
+    }
+
+    private static func makeSortedPlayerResults(from playerResults: [PlayerResult]) -> [PlayerResult] {
         playerResults.sorted { first, second in
             if first.didWin && !second.didWin {
                 return true
@@ -98,69 +190,33 @@ struct GameResult: Identifiable, Equatable {
         }
     }
 
-    var summaryText: String {
-        let sortedResults = sortedPlayerResults
-        let leadingResultIDs = Set(leadingNonBustResults.map(\.id))
-        let playerWidth = max(3, sortedResults.map(\.initials.count).max() ?? 0)
-        let scoreWidth = max(2, sortedResults.map { String($0.finalScore).count }.max() ?? 0)
-        var lines: [String] = []
-
-        lines.append("Archery 21")
-        lines.append("")
-        lines.append(shareOutcomeTitle)
-        lines.append(shareOutcomeDetail)
-        lines.append("")
-        lines.append("Target: \(targetScore)")
-        lines.append("Players: \(playerResults.count)")
-        lines.append("")
-        lines.append("Scorecard")
-
-        if sortedResults.isEmpty {
-            lines.append("No scores recorded.")
-        } else {
-            for (index, result) in sortedResults.enumerated() {
-                let rankText = leftPadded(
-                    "\(index + 1)",
-                    to: String(sortedResults.count).count
-                )
-                let scoreText = leftPadded(
-                    "\(result.finalScore)",
-                    to: scoreWidth
-                )
-                let statusText = shareStatus(
-                    for: result,
-                    leadingResultIDs: leadingResultIDs
-                )
-                let statusSuffix = statusText.map { "   \($0)" } ?? ""
-
-                lines.append("\(rankText). \(padded(result.initials, to: playerWidth))   \(scoreText)\(statusSuffix)")
-            }
+    private func shareOutcomeTitle(
+        winningResults: [PlayerResult],
+        leadingResults: [PlayerResult]
+    ) -> String {
+        if !winningResults.isEmpty {
+            return winningResults.count == 1 ? "Winner" : "Winners"
         }
 
-        return lines.joined(separator: "\n")
+        return leadingResults.isEmpty ? "No winner" : "Closest"
     }
 
-    private var shareOutcomeTitle: String {
-        if hasWinner {
-            return winners.count == 1 ? "Winner" : "Winners"
-        }
-
-        return leadingNonBustResults.isEmpty ? "No winner" : "Closest"
-    }
-
-    private var shareOutcomeDetail: String {
-        if hasWinner {
-            let subject = listText(winners.map(\.initials))
-            let verb = winners.count == 1 ? "wins" : "win"
+    private func shareOutcomeDetail(
+        winningResults: [PlayerResult],
+        leadingResults: [PlayerResult]
+    ) -> String {
+        if !winningResults.isEmpty {
+            let subject = listText(winningResults.map(\.initials))
+            let verb = winningResults.count == 1 ? "wins" : "win"
 
             return "\(subject) \(verb) with \(targetScore)"
         }
 
-        if leadingNonBustResults.isEmpty {
+        if leadingResults.isEmpty {
             return "All players bust"
         }
 
-        let closestText = leadingNonBustResults
+        let closestText = leadingResults
             .map { "\($0.initials) \($0.finalScore)" }
 
         return listText(closestText)
@@ -168,6 +224,7 @@ struct GameResult: Identifiable, Equatable {
 
     private func shareStatus(
         for result: PlayerResult,
+        hasWinningResult: Bool,
         leadingResultIDs: Set<UUID>
     ) -> String? {
         if result.didWin {
@@ -178,7 +235,7 @@ struct GameResult: Identifiable, Equatable {
             return "BUST"
         }
 
-        if !hasWinner && leadingResultIDs.contains(result.id) {
+        if !hasWinningResult && leadingResultIDs.contains(result.id) {
             return "CLOSE"
         }
 

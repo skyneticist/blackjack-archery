@@ -35,10 +35,18 @@ struct Player: Identifiable, Equatable {
     }
 
     mutating func decrementScore() {
-        score = max(0, score - 1)
+        guard score > 0 else {
+            return
+        }
+
+        score -= 1
     }
 
     mutating func resetScore() {
+        guard score != 0 else {
+            return
+        }
+
         score = 0
     }
 }

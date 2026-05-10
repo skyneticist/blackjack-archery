@@ -14,7 +14,12 @@ struct InitialsSetupView: View {
     let onBack: () -> Void
     let onStart: () -> Void
 
-    private let allowedCharacters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789").map(String.init)
+    private static let allowedCharacters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789").map(String.init)
+    private static let allowedCharacterIndexes = Dictionary(
+        uniqueKeysWithValues: allowedCharacters.enumerated().map { index, character in
+            (character, index)
+        }
+    )
 
     @State private var currentPlayerIndex: Int = 0
     @State private var selectedCharacterSlot: Int = 0
@@ -33,11 +38,11 @@ struct InitialsSetupView: View {
     private var currentCharacterIndex: Int {
         let currentCharacter = currentDraft?.characters[selectedCharacterSlot] ?? "A"
 
-        return allowedCharacters.firstIndex(of: currentCharacter) ?? 0
+        return Self.allowedCharacterIndexes[currentCharacter] ?? 0
     }
 
     private var maximumCharacterIndex: Double {
-        Double(max(allowedCharacters.count - 1, 0))
+        Double(max(Self.allowedCharacters.count - 1, 0))
     }
 
     var body: some View {
@@ -152,11 +157,11 @@ struct InitialsSetupView: View {
 
         let newCharacterIndex = Int(newValue.rounded())
 
-        guard allowedCharacters.indices.contains(newCharacterIndex) else {
+        guard Self.allowedCharacters.indices.contains(newCharacterIndex) else {
             return
         }
 
-        let newCharacter = allowedCharacters[newCharacterIndex]
+        let newCharacter = Self.allowedCharacters[newCharacterIndex]
 
         guard drafts[currentPlayerIndex].characters[selectedCharacterSlot] != newCharacter else {
             return

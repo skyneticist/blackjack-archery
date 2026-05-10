@@ -83,10 +83,14 @@ struct GameState: Equatable {
 
     mutating func resetAllScores() {
         for index in players.indices {
-            players[index].resetScore()
+            if players[index].score != 0 {
+                players[index].resetScore()
+            }
         }
 
-        selectedPlayerIndex = 0
+        if selectedPlayerIndex != 0 {
+            selectedPlayerIndex = 0
+        }
     }
 
     func makeResult() -> GameResult {

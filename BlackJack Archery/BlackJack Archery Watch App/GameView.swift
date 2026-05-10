@@ -16,6 +16,8 @@ struct GameView: View {
 
     @State private var crownValue: Double = 0
     @State private var isShowingGameActions = false
+    @State private var isShowingRules = false
+    @State private var cardSelectionHighlight = 0.0
     @FocusState private var isCrownFocused: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -25,64 +27,79 @@ struct GameView: View {
     }
 
     var body: some View {
-        VStack(spacing: 5) {
-            if let selectedPlayer = gameState.selectedPlayer {
-                PlayerScoreCard(
-                    player: selectedPlayer,
-                    positionText: gameState.selectedPlayerPositionText,
-                    playerCount: gameState.players.count,
-                    selectedPlayerIndex: gameState.selectedPlayerIndex,
-                    onIncrement: {
-                        incrementSelectedPlayerScore()
-                    },
-                    onDecrement: {
-                        decrementSelectedPlayerScore()
-                    }
-                )
-                .id(selectedPlayer.id)
-                .transition(.scale(scale: 0.97).combined(with: .opacity))
-
-                BottomControlsSlot {
-                    if isShowingGameActions {
-                        GameActionsTray(
-                            summaryText: gameState.makeResult().summaryText,
-                            onReset: {
-                                isShowingGameActions = false
-                                resetAllScores()
-                            },
-                            onNewGame: {
-                                isShowingGameActions = false
-                                onNewGame()
-                            },
-                            onClose: {
-                                withAnimation(controlsAnimation) {
-                                    isShowingGameActions = false
-                                }
-                            }
-                        )
-                    } else {
-                        HStack(spacing: 7) {
-                            FinishGameButton {
-                                finishGame()
-                            }
-                            .frame(maxWidth: 104)
-
-                            MoreGameActionsButton {
-                                withAnimation(controlsAnimation) {
-                                    isShowingGameActions = true
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
+        Group {
+            if isShowingRules {
+                RulesView {
+                    withAnimation(controlsAnimation) {
+                        isShowingRules = false
+                        isShowingGameActions = true
                     }
                 }
-                .animation(controlsAnimation, value: isShowingGameActions)
             } else {
-                EmptyGameView(
-                    onNewGame: {
-                        onNewGame()
+                VStack(spacing: 5) {
+                    if let selectedPlayer = gameState.selectedPlayer {
+                        PlayerScoreCard(
+                            player: selectedPlayer,
+                            players: gameState.players,
+                            positionText: gameState.selectedPlayerPositionText,
+                            playerCount: gameState.players.count,
+                            selectedPlayerIndex: gameState.selectedPlayerIndex,
+                            selectionHighlight: reduceMotion ? 0 : cardSelectionHighlight,
+                            onIncrement: {
+                                incrementSelectedPlayerScore()
+                            },
+                            onDecrement: {
+                                decrementSelectedPlayerScore()
+                            }
+                        )
+
+                        BottomControlsSlot {
+                            if isShowingGameActions {
+                                GameActionsTray(
+                                    onRules: {
+                                        withAnimation(controlsAnimation) {
+                                            isShowingRules = true
+                                        }
+                                    },
+                                    onReset: {
+                                        isShowingGameActions = false
+                                        resetAllScores()
+                                    },
+                                    onNewGame: {
+                                        isShowingGameActions = false
+                                        onNewGame()
+                                    },
+                                    onClose: {
+                                        withAnimation(controlsAnimation) {
+                                            isShowingGameActions = false
+                                        }
+                                    }
+                                )
+                            } else {
+                                HStack(spacing: 7) {
+                                    FinishGameButton {
+                                        finishGame()
+                                    }
+                                    .frame(maxWidth: 104)
+
+                                    MoreGameActionsButton {
+                                        withAnimation(controlsAnimation) {
+                                            isShowingGameActions = true
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .animation(controlsAnimation, value: isShowingGameActions)
+                    } else {
+                        EmptyGameView(
+                            onNewGame: {
+                                onNewGame()
+                            }
+                        )
                     }
-                )
+                }
             }
         }
         .padding(.horizontal, 8)
@@ -101,14 +118,21 @@ struct GameView: View {
         .onChange(of: crownValue) { _, newValue in
             updateSelectedPlayerFromCrownValue(newValue)
         }
-        .onChange(of: isShowingGameActions) { _, isShowing in
-            isCrownFocused = !isShowing
+        .onChange(of: isShowingGameActions) { _, _ in
+            updateCrownFocus()
+        }
+        .onChange(of: isShowingRules) { _, _ in
+            updateCrownFocus()
         }
         .onAppear {
-            crownValue = Double(gameState.selectedPlayerIndex)
+            let selectedIndexValue = Double(gameState.selectedPlayerIndex)
+
+            if crownValue != selectedIndexValue {
+                crownValue = selectedIndexValue
+            }
 
             DispatchQueue.main.async {
-                isCrownFocused = true
+                updateCrownFocus()
             }
         }
         .onDisappear {
@@ -125,9 +149,8 @@ struct GameView: View {
             return
         }
 
-        withAnimation(selectionAnimation) {
-            gameState.selectPlayer(at: newIndex)
-        }
+        gameState.selectPlayer(at: newIndex)
+        pulseSelectedCard()
 
         // digitalCrownRotation already provides detent haptics.
     }
@@ -151,7 +174,10 @@ struct GameView: View {
     private func resetAllScores() {
         withAnimation(resetAnimation) {
             gameState.resetAllScores()
-            crownValue = 0
+
+            if crownValue != 0 {
+                crownValue = 0
+            }
         }
 
         WKInterfaceDevice.current().play(.directionDown)
@@ -162,8 +188,33 @@ struct GameView: View {
         onFinishGame()
     }
 
-    private var selectionAnimation: Animation? {
-        reduceMotion ? nil : .spring(response: 0.18, dampingFraction: 0.88)
+    private func updateCrownFocus() {
+        let shouldFocusCrown = !isShowingGameActions && !isShowingRules
+
+        if isCrownFocused != shouldFocusCrown {
+            isCrownFocused = shouldFocusCrown
+        }
+    }
+
+    private func pulseSelectedCard() {
+        guard !reduceMotion else {
+            return
+        }
+
+        var resetTransaction = Transaction()
+        resetTransaction.disablesAnimations = true
+
+        withTransaction(resetTransaction) {
+            cardSelectionHighlight = 1
+        }
+
+        withAnimation(selectionHighlightAnimation) {
+            cardSelectionHighlight = 0
+        }
+    }
+
+    private var selectionHighlightAnimation: Animation? {
+        reduceMotion ? nil : .easeOut(duration: 0.16)
     }
 
     private var scoreAnimation: Animation? {
@@ -187,6 +238,7 @@ private struct BottomControlsSlot<Content: View>: View {
     }
 
     var body: some View {
+        // Keep collapsed and expanded controls in the same measured slot to avoid card movement.
         ZStack {
             content
         }
@@ -259,20 +311,19 @@ private struct MoreGameActionsButton: View {
 }
 
 private struct GameActionsTray: View {
-    let summaryText: String
+    let onRules: () -> Void
     let onReset: () -> Void
     let onNewGame: () -> Void
     let onClose: () -> Void
 
     var body: some View {
-        HStack(spacing: 5) {
-            ShareLink(
-                item: summaryText,
-                preview: SharePreview("Archery 21 Scores")
-            ) {
+        HStack(spacing: 4) {
+            Button {
+                onRules()
+            } label: {
                 GameActionTrayLabel(
-                    title: "Share",
-                    systemImage: "square.and.arrow.up",
+                    title: "Rules",
+                    systemImage: "list.bullet",
                     color: Color(red: 0.56, green: 0.78, blue: 0.74)
                 )
             }

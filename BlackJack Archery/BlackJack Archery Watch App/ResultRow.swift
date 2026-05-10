@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct ResultRow: View {
+struct ResultRow: View, Equatable {
     let rank: Int
     let playerResult: PlayerResult
 
